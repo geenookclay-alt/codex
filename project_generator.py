@@ -33,9 +33,15 @@ class ProjectGenerator:
     def generate(self, output_dir: Path, input_video: Path, strategies: list[Strategy], options: GenerateOptions) -> Path:
         ensure_dir(output_dir)
         manifest: dict[str, list[str]] = {"generated": []}
-        targets = [s for s in strategies if not options.selected_numbers or s.number in options.selected_numbers]
 
-        for strategy in targets:
+        if len(strategies) > 10:
+            self.log("경고: 전략 개수가 비정상적으로 많습니다. HTML 헤더 탐지를 재검토하세요.")
+
+        selected = [s for s in strategies if not options.selected_numbers or s.number in options.selected_numbers]
+        valid_strategies = [s for s in selected if s.segments]
+        self.log(f"final valid strategies={len(valid_strategies)}")
+
+        for strategy in valid_strategies:
             folder_name = f"strategy_{strategy.number:02}_{safe_filename(strategy.title)}"
             sdir = ensure_dir(output_dir / folder_name)
             preview_dir = ensure_dir(sdir / "preview")
@@ -59,8 +65,11 @@ class ProjectGenerator:
 
             if options.make_burnin:
                 burn_path = preview_dir / f"strategy_{strategy.number:02}_{safe_filename(strategy.title)}_subtitled.mp4"
-                self.video_builder.burn_in_subtitle(input_video, srt_path, burn_path)
-                generated.append(burn_path)
+                ok, reason = self.video_builder.maybe_burn_in_subtitle(input_video, srt_path, burn_path)
+                if ok:
+                    generated.append(burn_path)
+                else:
+                    self.log(f"burn-in skipped reason={reason}")
 
             if options.make_ai:
                 ai_dir = ensure_dir(sdir / "ai")

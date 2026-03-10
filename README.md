@@ -19,14 +19,15 @@ python main.py
 - 파서 분기:
   - PDF: `pdfplumber`
   - HTML: `BeautifulSoup`
-    - table/tr/td 우선 파싱
-    - 실패 시 텍스트 fallback 파싱
+    - table/tr/td 우선 파싱(table-first)
+    - table 파싱 실패 시 텍스트 fallback 파싱
+    - strategy number는 1~10만 허용
+    - 세그먼트가 0개인 strategy는 제외
 - 공통 내부 데이터 모델: `Strategy`, `Segment`
-- 전략 헤더/세그먼트 블록 파싱
 - 전략별 출력:
   - EDL/SRT/CSV/JSON
   - ffmpeg preview mp4
-  - optional burn-in mp4
+  - optional burn-in mp4 (SRT 존재/크기 검사 후 실행)
   - AI 패키지 파일 일괄 생성
 - tkinter GUI
 - 디버그 로그 강화
@@ -58,9 +59,11 @@ output/
 - `bs4 import 성공 여부`
 - `ffmpeg path`
 - `input file type`
-- `total lines or extracted text length`
-- `detected strategies`
-- `segment block counts`
+- `html parse mode: table-first or text-fallback`
+- `detected strategy containers`
+- `final valid strategies count`
+- `strategy N segment count`
+- `burn-in skipped reason if srt is empty`
 - `generated file paths`
 - `errors with stderr`
 
@@ -76,6 +79,9 @@ output/
 3. **HTML 테이블 파싱 실패**
    - 자동으로 텍스트 fallback 파싱 수행
 
-4. **Windows 경로 이슈**
+4. **SRT가 비어있어 burn-in 실패하는 경우**
+   - 현재는 burn-in 단계를 자동으로 건너뛰고 경고 로그를 남김
+
+5. **Windows 경로 이슈**
    - 파일명 자동 sanitize 처리
-   - burn-in 자막 필터에서 백슬래시/콜론 이스케이프 처리
+   - burn-in 자막 필터에서 경로 슬래시/콜론 이스케이프 처리

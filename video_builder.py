@@ -18,8 +18,19 @@ class VideoBuilder:
             raise RuntimeError("프리뷰 영상 생성 실패")
 
     def burn_in_subtitle(self, input_video: Path, srt_path: Path, output_video: Path) -> None:
+        ok, reason = self.maybe_burn_in_subtitle(input_video, srt_path, output_video)
+        if not ok:
+            raise RuntimeError(f"burn-in 영상 생성 실패: {reason}")
+
+    def maybe_burn_in_subtitle(self, input_video: Path, srt_path: Path, output_video: Path) -> tuple[bool, str | None]:
+        srt_file = Path(srt_path)
+        if not srt_file.exists():
+            return False, f"SRT 파일 없음: {srt_path}"
+        if srt_file.stat().st_size == 0:
+            return False, f"SRT 파일 비어 있음: {srt_path}"
+
         output_video.parent.mkdir(parents=True, exist_ok=True)
-        srt_escaped = str(srt_path).replace("\\", "\\\\").replace(":", "\\:")
+        srt_escaped = str(srt_file).replace("\\", "/").replace(":", "\\:")
         cmd = [
             self.ffmpeg_path,
             "-y",
@@ -35,4 +46,5 @@ class VideoBuilder:
         ]
         rc, _, _ = run_cmd(cmd, self.log)
         if rc != 0:
-            raise RuntimeError("burn-in 영상 생성 실패")
+            return False, "ffmpeg 실행 실패"
+        return True, None
