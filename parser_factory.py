@@ -13,11 +13,7 @@ def create_parser(file_path: str, log: LogFn) -> BaseStrategyParser:
     log(f"input file type={file_type}")
 
     if file_type == "pdf":
-        parser: BaseStrategyParser = PDFStrategyParser(log)
-    elif file_type == "html":
-        parser = HTMLStrategyParser(log)
-    else:
-        raise ValueError(f"지원하지 않는 파일 형식: {file_path}")
-
-    log(f"parser selected={parser.__class__.__name__}")
-    return parser
+        return PDFStrategyParser(log)
+    if file_type == "html":
+        return HTMLStrategyParser(log)
+    raise ValueError(f"지원하지 않는 파일 형식: {file_path}")

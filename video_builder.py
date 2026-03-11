@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from utils import LogFn, run_cmd
@@ -23,14 +24,16 @@ class VideoBuilder:
             raise RuntimeError(f"burn-in 영상 생성 실패: {reason}")
 
     def maybe_burn_in_subtitle(self, input_video: Path, srt_path: Path, output_video: Path) -> tuple[bool, str | None]:
-        srt_file = Path(srt_path)
-        if not srt_file.exists():
+        if not os.path.exists(srt_path):
+            self.log(f"burn-in skipped reason=SRT 파일 없음: {srt_path}")
             return False, f"SRT 파일 없음: {srt_path}"
-        if srt_file.stat().st_size == 0:
+
+        if os.path.getsize(srt_path) == 0:
+            self.log(f"burn-in skipped reason=SRT 파일 비어 있음: {srt_path}")
             return False, f"SRT 파일 비어 있음: {srt_path}"
 
         output_video.parent.mkdir(parents=True, exist_ok=True)
-        srt_escaped = str(srt_file).replace("\\", "/").replace(":", "\\:")
+        srt_escaped = str(Path(srt_path)).replace("\\", "/").replace(":", "\\:")
         cmd = [
             self.ffmpeg_path,
             "-y",
