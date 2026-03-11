@@ -1,42 +1,56 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
+from typing import Callable
 
 import pdfplumber
 
 from base_parser import BaseStrategyParser
 from models import Strategy
-from utils import SEGMENT_START_PATTERN, is_strategy_header
+from settings import STRATEGY_TYPES
+
+HEADER_RE = re.compile(r"^(10|[1-9])\s+(?!\[[NA]\])(.*\S.*)$")
+SEGMENT_RE = re.compile(r"^\d+\s+\[[NA]\]")
 
 
 class PDFStrategyParser(BaseStrategyParser):
-    def parse(self, file_path: str) -> list[Strategy]:
-        chunks: list[str] = []
-        with pdfplumber.open(file_path) as pdf:
+    def __init__(self, logger: Callable[[str], None]) -> None:
+        super().__init__(logger)
+
+    def parse(self, file_path: Path) -> list[Strategy]:
+        self.logger("input file type=pdf")
+        lines: list[str] = []
+        with pdfplumber.open(str(file_path)) as pdf:
             for page in pdf.pages:
                 text = page.extract_text() or ""
-                if text.strip():
-                    chunks.append(text)
+                lines.extend([ln.strip() for ln in text.splitlines() if ln.strip()])
 
-        lines = [re.sub(r"\s+", " ", line).strip() for line in "\n".join(chunks).splitlines() if line.strip()]
-        self.log("input file type=pdf")
-
-        starts: list[tuple[int, int, str]] = []
-        titles: list[str] = []
-        for i, line in enumerate(lines):
-            if SEGMENT_START_PATTERN.match(line):
+        strategies: dict[int, Strategy] = {}
+        current_no: int | None = None
+        for line in lines:
+            if SEGMENT_RE.match(line):
+                if current_no in strategies:
+                    strategies[current_no].segments.append({"line": line})
                 continue
-            if not is_strategy_header(line):
+            m = HEADER_RE.match(line)
+            if not m:
                 continue
-            number = int(line.split()[0])
-            title = re.sub(r"^\d{1,2}\s+", "", line).strip()
-            starts.append((i, number, title))
-            titles.append(f"{number}. {title}")
+            no = int(m.group(1))
+            title = m.group(2).strip()
+            if no in strategies or len(title) < 5:
+                continue
+            current_no = no
+            strategies[no] = Strategy(
+                strategy_number=no,
+                strategy_title=title,
+                strategy_type=STRATEGY_TYPES[(no - 1) % len(STRATEGY_TYPES)],
+                description=f"PDF 파싱 전략 {no}",
+            )
 
-        self.log(f"detected strategy titles={titles}")
-
-        strategies: list[Strategy] = []
-        for idx, (start, number, title) in enumerate(starts):
-            end = starts[idx + 1][0] if idx + 1 < len(starts) else len(lines)
-            strategies.append(self.parse_strategy_content(number, title, lines[start + 1 : end]))
-        return self.finalize(strategies)
+        valid = [s for s in sorted(strategies.values(), key=lambda x: x.strategy_number) if s.segments]
+        self.logger(f"detected strategy titles={[s.strategy_title for s in valid]}")
+        self.logger(f"valid strategies count={len(valid)}")
+        for s in valid:
+            self.logger(f"per-strategy segment count={s.strategy_number}:{len(s.segments)}")
+        return valid

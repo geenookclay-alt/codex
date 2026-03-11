@@ -1,140 +1,69 @@
 from __future__ import annotations
 
-import csv
-import json
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
-from ai_packager import AIPackager
-from edl_writer import EDLWriter
-from models import Strategy
-from subtitle_builder import SubtitleBuilder
-from upload_packager import UploadPackager
-from utils import ensure_dir, safe_filename
-from video_builder import VideoBuilder
+from ai_packager import package_ai
+from edl_writer import write_edl
+from models import Project, Strategy
+from subtitle_builder import build_srt
+from upload_packager import build_upload_package
+from utils import ensure_dir, save_csv, save_json, safe_title
+from video_builder import make_burn_in, make_preview
 
 
 @dataclass
 class GenerateOptions:
-    subtitle_style: str
-    make_preview: bool
-    make_burnin: bool
-    make_ai: bool
-    make_upload: bool
-    selected_numbers: list[int] | None = None
+    ffmpeg_path: str
+    subtitle_style: str = "rhythm"
+    make_preview: bool = True
+    make_burnin: bool = False
+    make_ai: bool = True
+    make_upload: bool = True
 
 
 class ProjectGenerator:
-    def __init__(self, ffmpeg_path: str, log):
-        self.log = log
-        self.sub_builder = SubtitleBuilder()
-        self.edl_writer = EDLWriter()
-        self.video_builder = VideoBuilder(ffmpeg_path, log)
-        self.ai_packager = AIPackager()
-        self.upload_packager = UploadPackager()
+    def __init__(self, logger: Callable[[str], None]) -> None:
+        self.logger = logger
 
-    def generate(self, output_dir: Path, input_video: Path, strategies: list[Strategy], options: GenerateOptions) -> Path:
-        ensure_dir(output_dir)
-        selected = [s for s in strategies if not options.selected_numbers or s.number in options.selected_numbers]
+    def generate(self, project: Project, strategies: list[Strategy], project_dir: Path, source_video: Path, opts: GenerateOptions) -> Path:
+        outputs = ensure_dir(project_dir / "outputs")
+        manifest: dict = {"project_id": project.project_id, "items": []}
 
-        rankings = [
-            {
-                "strategy_number": s.number,
-                "strategy_title": s.title,
+        for s in strategies[:3]:
+            folder = ensure_dir(outputs / f"strategy_{s.strategy_number:02d}_{safe_title(s.strategy_title)}")
+            base = folder / f"strategy_{s.strategy_number:02d}"
+            edl = write_edl(s, base.with_suffix(".edl"))
+            srt = build_srt(s, base.with_suffix(".srt"), opts.subtitle_style)
+            rows = [{"segment": seg.get("line", "")} for seg in s.segments] or [{"segment": "auto"}]
+            save_csv(base.with_suffix(".csv"), rows)
+            save_json(base.with_suffix(".json"), s.to_dict())
+            save_json(folder / f"strategy_{s.strategy_number:02d}_evaluation.json", {
+                "hook_score": s.hook_score,
+                "emotion_score": s.emotion_score,
+                "clarity_score": s.clarity_score,
+                "shorts_fit_score": s.shorts_fit_score,
                 "overall_score": s.overall_score,
-                "recommended": s.recommended,
-            }
-            for s in sorted(selected, key=lambda item: item.overall_score, reverse=True)
-        ]
-        rankings_path = output_dir / "strategy_rankings.json"
-        rankings_path.write_text(json.dumps(rankings, ensure_ascii=False, indent=2), encoding="utf-8")
-        self.log(f"strategy rankings path={rankings_path}")
+            })
 
-        generated_root = output_dir / "strategies_generated.json"
-        generated_root.write_text(json.dumps([s.to_dict() for s in selected], ensure_ascii=False, indent=2), encoding="utf-8")
-
-        manifest: dict[str, object] = {"generated_output_paths": [], "strategies": {}, "rankings_path": str(rankings_path)}
-        for strategy in selected:
-            folder = ensure_dir(output_dir / f"strategy_{strategy.number:02}_{safe_filename(strategy.title)}")
             preview_dir = ensure_dir(folder / "preview")
-            generated: list[Path] = []
+            preview_path = preview_dir / f"strategy_{s.strategy_number:02d}_{safe_title(s.strategy_title)}.mp4"
+            burn_path = preview_dir / f"strategy_{s.strategy_number:02d}_{safe_title(s.strategy_title)}_subtitled.mp4"
+            if opts.make_preview:
+                make_preview(source_video, preview_path, opts.ffmpeg_path, self.logger)
+            if opts.make_burnin:
+                make_burn_in(source_video, srt, burn_path, opts.ffmpeg_path, self.logger)
 
-            edl_path = folder / f"strategy_{strategy.number:02}.edl"
-            srt_path = folder / f"strategy_{strategy.number:02}.srt"
-            csv_path = folder / f"strategy_{strategy.number:02}.csv"
-            json_path = folder / f"strategy_{strategy.number:02}.json"
-            eval_path = folder / f"strategy_{strategy.number:02}_evaluation.json"
+            if opts.make_ai:
+                package_ai(s, ensure_dir(folder / "ai"))
+            if opts.make_upload:
+                build_upload_package(s, ensure_dir(folder / "upload"))
 
-            edl_path.write_text(self.edl_writer.build_edl(strategy), encoding="utf-8")
-            srt_path.write_text(self.sub_builder.build_srt(strategy, options.subtitle_style), encoding="utf-8")
-            self._write_csv(csv_path, strategy)
-            json_path.write_text(json.dumps(strategy.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
-            eval_path.write_text(
-                json.dumps(
-                    {
-                        "strategy_number": strategy.number,
-                        "hook_score": strategy.hook_score,
-                        "emotion_score": strategy.emotion_score,
-                        "clarity_score": strategy.clarity_score,
-                        "shorts_fit_score": strategy.shorts_fit_score,
-                        "overall_score": strategy.overall_score,
-                        "recommended": strategy.recommended,
-                    },
-                    ensure_ascii=False,
-                    indent=2,
-                ),
-                encoding="utf-8",
-            )
-            generated.extend([edl_path, srt_path, csv_path, json_path, eval_path])
+            manifest["items"].append({"strategy": s.strategy_number, "path": str(folder), "edl": str(edl), "srt": str(srt)})
+            self.logger(f"generated output paths={folder}")
 
-            preview_path = preview_dir / f"strategy_{strategy.number:02}_{safe_filename(strategy.title)}.mp4"
-            if options.make_preview:
-                self.video_builder.build_preview(input_video, strategy, preview_path)
-                generated.append(preview_path)
-
-            if options.make_burnin:
-                burnin_path = preview_dir / f"strategy_{strategy.number:02}_{safe_filename(strategy.title)}_subtitled.mp4"
-                source_video = preview_path if preview_path.exists() else input_video
-                ok, reason = self.video_builder.maybe_burn_in_subtitle(source_video, srt_path, burnin_path)
-                if ok:
-                    generated.append(burnin_path)
-                else:
-                    self.log(f"burn-in skipped reason={reason}")
-
-            if options.make_ai:
-                ai_files = self.ai_packager.create(
-                    strategy,
-                    folder / "ai",
-                    options.subtitle_style,
-                    [str(path) for path in generated],
-                )
-                generated.extend(ai_files)
-
-            if options.make_upload:
-                generated.extend(self.upload_packager.create(strategy, folder / "upload"))
-
-            self.log(f"generated output paths={[str(path) for path in generated]}")
-            manifest["generated_output_paths"] += [str(path) for path in generated]
-            manifest["strategies"][str(strategy.number)] = [str(path) for path in generated]
-
-        manifest_path = output_dir / "manifest.json"
-        manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
-        self.log(f"final manifest path={manifest_path}")
+        manifest_path = project_dir / "final_manifest.json"
+        save_json(manifest_path, manifest)
+        self.logger(f"final manifest path={manifest_path}")
         return manifest_path
-
-    def _write_csv(self, path: Path, strategy: Strategy) -> None:
-        with path.open("w", newline="", encoding="utf-8-sig") as handle:
-            writer = csv.writer(handle)
-            writer.writerow(["segment_idx", "mode", "audio_text", "caption_text", "estimated_seconds", "timecodes", "visual_note"])
-            for segment in strategy.segments:
-                writer.writerow(
-                    [
-                        segment.idx,
-                        segment.mode,
-                        segment.audio_text,
-                        segment.caption_text,
-                        segment.estimated_seconds,
-                        "|".join(segment.timecodes),
-                        segment.visual_note,
-                    ]
-                )
