@@ -1,13 +1,6 @@
-import { IsIn, IsOptional, IsString, IsUUID } from 'class-validator';
-
 export class CreateTasksDto {
-  @IsString()
-  type!: string;
-
-  @IsIn(['ai','video','analytics'])
-  queue!: 'ai' | 'video' | 'analytics';
-
-  @IsOptional()
-  @IsUUID()
+  name!: string;
+  teamId?: string;
   projectId?: string;
+  metadata?: Record<string, unknown>;
 }

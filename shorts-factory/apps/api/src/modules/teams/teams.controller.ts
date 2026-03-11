@@ -1,26 +1,23 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { TeamsService } from './teams.service';
 import { CreateTeamsDto } from './dto/create-teams.dto';
-import { TeamsEntity } from './entity/teams.entity';
-import { JwtGuard } from '../../common/jwt.guard';
 
-@UseGuards(JwtGuard)
 @Controller('teams')
 export class TeamsController {
   constructor(private readonly service: TeamsService) {}
 
   @Get()
-  findAll(): Promise<TeamsEntity[]> {
-    return this.service.findAll();
+  list() {
+    return this.service.list();
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string): Promise<TeamsEntity | null> {
-    return this.service.findOne(id);
+  get(@Param('id') id: string) {
+    return this.service.get(id);
   }
 
   @Post()
-  create(@Body() dto: CreateTeamsDto): Promise<TeamsEntity> {
-    return this.service.create(dto);
+  create(@Body() body: CreateTeamsDto) {
+    return this.service.create(body);
   }
 }

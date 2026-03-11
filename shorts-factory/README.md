@@ -1,10 +1,17 @@
 # Shorts Factory v7
 
-Production-ready monorepo scaffold for collaborative YouTube Shorts planning, generation, rendering, scheduling, and analytics.
+Production-ready monorepo scaffold for collaborative YouTube Shorts production.
 
-## Repository layout
+## Architecture
+- **Frontend:** Next.js (TypeScript), Tailwind-ready, React Query
+- **Service API:** NestJS (TypeScript)
+- **Workers:** FastAPI + Redis queue consumers (AI, video, analytics)
+- **Queue:** Redis
+- **Database:** PostgreSQL
+- **Video Tooling:** FFmpeg (`C:/ffmpeg/bin/ffmpeg.exe`)
 
-```
+## Monorepo Layout
+```txt
 shorts-factory/
   apps/
     web/
@@ -22,39 +29,35 @@ shorts-factory/
   docs/
 ```
 
-## Core capabilities implemented
-- Team collaboration model (users/teams/roles/channels/projects).
-- AI-assisted strategy/title/hook generation endpoints and queue workers.
-- Video automation worker with FFmpeg path fixed to `C:/ffmpeg/bin/ffmpeg.exe`.
-- Upload queue domain with scheduling status support.
-- Performance analytics records and recommendation update pipeline.
+## Quick Start
+1. Start infrastructure:
+   - `docker compose -f infra/postgres/docker-compose.yml up -d`
+   - `docker compose -f infra/redis/docker-compose.yml up -d`
+2. Install web/api deps at root: `npm install`
+3. Run API: `npm run dev:api`
+4. Run Web: `npm run dev:web`
+5. Run workers:
+   - `cd services/ai-worker && pip install -r requirements.txt && uvicorn app.main:app --reload --port 8101`
+   - `cd services/video-worker && pip install -r requirements.txt && uvicorn app.main:app --reload --port 8102`
+   - `cd services/analytics-worker && pip install -r requirements.txt && uvicorn app.main:app --reload --port 8103`
 
-## Run locally
+## Task Execution Flow
+User action → API request → Task creation → Redis queue → Worker execution → Database update → UI refresh.
 
-1. Install dependencies (pnpm, Python 3.11+, Redis, PostgreSQL).
-2. Apply DB schema:
-   ```bash
-   psql -U shorts -d shorts_factory -f infra/postgres/schema.sql
-   ```
-3. Start Redis and Postgres (see infra docs).
-4. Start API and web:
-   ```bash
-   pnpm dev:api
-   pnpm dev:web
-   ```
-5. Start workers:
-   ```bash
-   cd services/ai-worker && pip install -r requirements.txt && uvicorn app:app --port 8101
-   cd services/video-worker && pip install -r requirements.txt && uvicorn app:app --port 8102
-   cd services/analytics-worker && pip install -r requirements.txt && uvicorn app:app --port 8103
-   ```
-
-## Task execution flow
-`User action -> API -> task row -> Redis queue -> worker -> DB update -> React Query refresh`
-
-## Example FFmpeg commands
-
+## FFmpeg Examples
+- Preview render:
 ```bash
-C:/ffmpeg/bin/ffmpeg.exe -i input.mp4 -vf "scale=720:1280" -t 00:00:15 preview.mp4
-C:/ffmpeg/bin/ffmpeg.exe -i input.mp4 -vf "subtitles=subtitles.srt" -c:v libx264 burnin.mp4
+C:/ffmpeg/bin/ffmpeg.exe -y -i input.mp4 -vf scale=720:1280 -t 00:00:20 preview.mp4
 ```
+- Burn-in subtitles:
+```bash
+C:/ffmpeg/bin/ffmpeg.exe -y -i input.mp4 -vf "subtitles=subtitles.srt" burnin.mp4
+```
+- Extract thumbnail frame:
+```bash
+C:/ffmpeg/bin/ffmpeg.exe -y -i input.mp4 -ss 00:00:01.000 -vframes 1 thumbnail.jpg
+```
+
+## Security
+- JWT authentication (NestJS `auth` module scaffold)
+- RBAC roles: `admin`, `planner`, `editor`, `operator`, `analyst`

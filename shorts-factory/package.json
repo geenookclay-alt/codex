@@ -1,12 +1,12 @@
 {
   "name": "shorts-factory-v7",
   "private": true,
-  "version": "0.1.0",
-  "packageManager": "pnpm@9.0.0",
+  "version": "1.0.0",
+  "workspaces": ["apps/*", "packages/*"],
   "scripts": {
-    "dev:web": "pnpm --filter @shorts-factory/web dev",
-    "dev:api": "pnpm --filter @shorts-factory/api start:dev",
-    "build": "pnpm -r build",
-    "lint": "pnpm -r lint"
+    "dev:web": "npm --workspace @shorts-factory/web run dev",
+    "dev:api": "npm --workspace @shorts-factory/api run start:dev",
+    "build": "npm run -ws build",
+    "lint": "npm run -ws lint"
   }
 }

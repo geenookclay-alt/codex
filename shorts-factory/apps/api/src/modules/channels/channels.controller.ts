@@ -1,26 +1,23 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { ChannelsService } from './channels.service';
 import { CreateChannelsDto } from './dto/create-channels.dto';
-import { ChannelsEntity } from './entity/channels.entity';
-import { JwtGuard } from '../../common/jwt.guard';
 
-@UseGuards(JwtGuard)
 @Controller('channels')
 export class ChannelsController {
   constructor(private readonly service: ChannelsService) {}
 
   @Get()
-  findAll(): Promise<ChannelsEntity[]> {
-    return this.service.findAll();
+  list() {
+    return this.service.list();
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string): Promise<ChannelsEntity | null> {
-    return this.service.findOne(id);
+  get(@Param('id') id: string) {
+    return this.service.get(id);
   }
 
   @Post()
-  create(@Body() dto: CreateChannelsDto): Promise<ChannelsEntity> {
-    return this.service.create(dto);
+  create(@Body() body: CreateChannelsDto) {
+    return this.service.create(body);
   }
 }

@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { RedisQueueService } from './common/redis-queue.service';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { TeamsModule } from './modules/teams/teams.module';
@@ -12,18 +13,8 @@ import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { RecommendationsModule } from './modules/recommendations/recommendations.module';
 
 @Module({
-  imports: [
-    AuthModule,
-    UsersModule,
-    TeamsModule,
-    ChannelsModule,
-    ProjectsModule,
-    StrategiesModule,
-    TasksModule,
-    QueueModule,
-    UploadsModule,
-    AnalyticsModule,
-    RecommendationsModule
-  ]
+  imports: [AuthModule, UsersModule, TeamsModule, ChannelsModule, ProjectsModule, StrategiesModule, TasksModule, QueueModule, UploadsModule, AnalyticsModule, RecommendationsModule],
+  providers: [RedisQueueService],
+  exports: [RedisQueueService],
 })
 export class AppModule {}

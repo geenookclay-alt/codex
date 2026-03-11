@@ -1,5 +1,6 @@
 export class AuthEntity {
   id!: string;
-  email!: string;
-  passwordHash!: string;
+  created_at!: string;
+  updated_at!: string;
+  name!: string;
 }

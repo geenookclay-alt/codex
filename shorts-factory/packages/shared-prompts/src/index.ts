@@ -1,3 +1,3 @@
-export const STRATEGY_PROMPT = `Create YouTube Shorts strategy variants with hooks, target audience, and CTA.`;
-export const TITLE_PROMPT = `Generate punchy, high-CTR titles under 65 characters.`;
-export const HOOK_PROMPT = `Generate first-3-second spoken hooks optimized for retention.`;
+export const STRATEGY_PROMPT = `Generate short-form content strategies optimized for watch-through and CTR.`;
+export const TITLE_PROMPT = `Generate concise, curiosity-driven YouTube Shorts titles.`;
+export const HOOK_PROMPT = `Generate 3-second opening hooks for retention.`;
