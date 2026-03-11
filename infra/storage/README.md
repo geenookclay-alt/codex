@@ -1,0 +1,1 @@
+Filesystem/object storage abstraction for artifacts and manifests.

@@ -1,0 +1,20 @@
+# Required Routes
+
+- POST `/api/assets/register`
+- POST `/api/assets/scan-inbox`
+- POST `/api/projects`
+- POST `/api/strategies/generate`
+- POST `/api/strategies/enhance`
+- POST `/api/strategies/rank`
+- POST `/api/build/srt`
+- POST `/api/build/edl`
+- POST `/api/build/preview`
+- POST `/api/build/burnin`
+- POST `/api/uploads/ai-package`
+- POST `/api/uploads/upload-package`
+- POST `/api/queue/insert`
+- POST `/api/queue/schedule`
+- POST `/api/analytics/save`
+- POST `/api/analytics/import`
+- GET `/api/recommendations`
+- PATCH `/api/channel-policies/:channelId`
