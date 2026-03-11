@@ -32,5 +32,5 @@ class Strategy:
             "title": self.title,
             "description": self.description,
             "reorder_text": self.reorder_text,
-            "segments": [s.to_dict() for s in self.segments],
+            "segments": [segment.to_dict() for segment in self.segments],
         }

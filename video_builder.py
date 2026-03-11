@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import os
+import tempfile
 from pathlib import Path
 
-from utils import LogFn, run_cmd
+from models import Strategy
+from utils import LogFn, run_cmd, tc_to_seconds
 
 
 class VideoBuilder:
@@ -11,36 +12,72 @@ class VideoBuilder:
         self.ffmpeg_path = ffmpeg_path
         self.log = log
 
-    def build_preview(self, input_video: Path, output_video: Path) -> None:
+    def build_preview(self, input_video: Path, strategy: Strategy, output_video: Path) -> None:
         output_video.parent.mkdir(parents=True, exist_ok=True)
-        cmd = [self.ffmpeg_path, "-y", "-i", str(input_video), "-t", "30", "-c:v", "libx264", "-c:a", "aac", str(output_video)]
-        rc, _, _ = run_cmd(cmd, self.log)
-        if rc != 0:
-            raise RuntimeError("프리뷰 영상 생성 실패")
+        with tempfile.TemporaryDirectory(prefix="shorts_v4_") as temp_dir:
+            temp = Path(temp_dir)
+            parts: list[Path] = []
+            for i, segment in enumerate(strategy.segments, start=1):
+                if not segment.timecodes:
+                    continue
+                start_sec = tc_to_seconds(segment.timecodes[0])
+                duration = max(0.2, segment.estimated_seconds)
+                part = temp / f"part_{i:03}.mp4"
+                cmd = [
+                    self.ffmpeg_path,
+                    "-y",
+                    "-ss",
+                    f"{start_sec:.3f}",
+                    "-i",
+                    str(input_video),
+                    "-t",
+                    f"{duration:.3f}",
+                    "-c:v",
+                    "libx264",
+                    "-c:a",
+                    "aac",
+                    str(part),
+                ]
+                rc, _, _ = run_cmd(cmd, self.log)
+                if rc == 0 and part.exists() and part.stat().st_size > 0:
+                    parts.append(part)
+            if not parts:
+                raise RuntimeError("프리뷰 생성용 세그먼트 추출 실패")
 
-    def burn_in_subtitle(self, input_video: Path, srt_path: Path, output_video: Path) -> None:
-        ok, reason = self.maybe_burn_in_subtitle(input_video, srt_path, output_video)
-        if not ok:
-            raise RuntimeError(f"burn-in 영상 생성 실패: {reason}")
+            concat_file = temp / "concat.txt"
+            concat_file.write_text("\n".join([f"file '{p.as_posix()}'" for p in parts]), encoding="utf-8")
+            cmd_concat = [
+                self.ffmpeg_path,
+                "-y",
+                "-f",
+                "concat",
+                "-safe",
+                "0",
+                "-i",
+                str(concat_file),
+                "-c",
+                "copy",
+                str(output_video),
+            ]
+            rc, _, _ = run_cmd(cmd_concat, self.log)
+            if rc != 0:
+                raise RuntimeError("프리뷰 concat 실패")
 
-    def maybe_burn_in_subtitle(self, input_video: Path, srt_path: Path, output_video: Path) -> tuple[bool, str | None]:
-        if not os.path.exists(srt_path):
-            self.log(f"burn-in skipped reason=SRT 파일 없음: {srt_path}")
-            return False, f"SRT 파일 없음: {srt_path}"
-
-        if os.path.getsize(srt_path) == 0:
-            self.log(f"burn-in skipped reason=SRT 파일 비어 있음: {srt_path}")
-            return False, f"SRT 파일 비어 있음: {srt_path}"
+    def maybe_burn_in_subtitle(self, input_video: Path, srt_path: Path, output_video: Path) -> tuple[bool, str]:
+        if not srt_path.exists():
+            return False, f"srt not found: {srt_path}"
+        if srt_path.stat().st_size == 0:
+            return False, f"srt empty: {srt_path}"
 
         output_video.parent.mkdir(parents=True, exist_ok=True)
-        srt_escaped = str(Path(srt_path)).replace("\\", "/").replace(":", "\\:")
+        sub_path = srt_path.resolve().as_posix().replace(":", "\\:")
         cmd = [
             self.ffmpeg_path,
             "-y",
             "-i",
             str(input_video),
             "-vf",
-            f"subtitles='{srt_escaped}'",
+            f"subtitles='{sub_path}'",
             "-c:v",
             "libx264",
             "-c:a",
@@ -49,5 +86,5 @@ class VideoBuilder:
         ]
         rc, _, _ = run_cmd(cmd, self.log)
         if rc != 0:
-            return False, "ffmpeg 실행 실패"
-        return True, None
+            return False, "ffmpeg burn-in command failed"
+        return True, ""
