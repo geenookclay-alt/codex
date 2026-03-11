@@ -1,12 +1,17 @@
+import crypto from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { CreateTeamsDto } from './dto/create-teams.dto';
-import { TeamsEntity } from './entity/teams.entity';
 
 @Injectable()
 export class TeamsService {
-  async findAll(): Promise<TeamsEntity[]> { return []; }
-  async findOne(id: string): Promise<TeamsEntity | null> { return { id, name: 'teams' } as TeamsEntity; }
-  async create(dto: CreateTeamsDto): Promise<TeamsEntity> {
-    return { id: crypto.randomUUID(), name: dto.name ?? 'teams' } as TeamsEntity;
+  list() {
+    return [];
+  }
+
+  get(id: string) {
+    return { id };
+  }
+  create(input: CreateTeamsDto) {
+    return { id: crypto.randomUUID(), ...input };
   }
 }

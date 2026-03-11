@@ -1,26 +1,23 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { ProjectsService } from './projects.service';
 import { CreateProjectsDto } from './dto/create-projects.dto';
-import { ProjectsEntity } from './entity/projects.entity';
-import { JwtGuard } from '../../common/jwt.guard';
 
-@UseGuards(JwtGuard)
 @Controller('projects')
 export class ProjectsController {
   constructor(private readonly service: ProjectsService) {}
 
   @Get()
-  findAll(): Promise<ProjectsEntity[]> {
-    return this.service.findAll();
+  list() {
+    return this.service.list();
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string): Promise<ProjectsEntity | null> {
-    return this.service.findOne(id);
+  get(@Param('id') id: string) {
+    return this.service.get(id);
   }
 
   @Post()
-  create(@Body() dto: CreateProjectsDto): Promise<ProjectsEntity> {
-    return this.service.create(dto);
+  create(@Body() body: CreateProjectsDto) {
+    return this.service.create(body);
   }
 }
