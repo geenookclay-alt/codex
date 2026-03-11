@@ -1,95 +1,43 @@
 from __future__ import annotations
 
-from models import Segment, Strategy
-from prompt_templates import PLATFORM_HINTS, STRATEGY_TYPES, STYLE_HINTS
+from typing import Callable
+
+from models import Strategy
+from settings import STRATEGY_TYPES
 
 
 class StrategyGenerator:
-    def __init__(self, log):
-        self.log = log
+    def __init__(self, logger: Callable[[str], None]) -> None:
+        self.logger = logger
 
-    def generate(
-        self,
-        count: int,
-        style: str,
-        platform: str,
-        source_hint: str,
-        user_keywords: str,
-        memo_text: str,
-        start_number: int = 1,
-    ) -> list[Strategy]:
-        style_hint = STYLE_HINTS.get(style, STYLE_HINTS["혼합형"])
-        platform_hint = PLATFORM_HINTS.get(platform, PLATFORM_HINTS["YouTube Shorts"])
-        keywords = [word.strip() for word in user_keywords.split(",") if word.strip()]
-        keyword_seed = keywords[0] if keywords else "핵심 사건"
-
-        result: list[Strategy] = []
-        for i in range(count):
-            number = start_number + i
-            strategy_type = STRATEGY_TYPES[i % len(STRATEGY_TYPES)]
-            title = f"{keyword_seed} {strategy_type} 쇼츠 전략"
-            if source_hint:
-                title = f"{keyword_seed} | {strategy_type}"
-
-            segments = [
-                Segment(
-                    idx=1,
-                    mode="N",
-                    audio_text=f"시작 3초 훅: {keyword_seed}의 결과부터 보여준다.",
-                    caption_text=f"결과부터 공개: {keyword_seed}",
-                    estimated_seconds=3.0,
-                    timecodes=["00:00"],
-                    visual_note="강한 표정/충격 컷",
-                ),
-                Segment(
-                    idx=2,
-                    mode="A",
-                    audio_text=f"갈등 핵심과 감정 포인트를 2문장으로 전달. {style_hint}",
-                    caption_text="갈등 포인트 압축",
-                    estimated_seconds=6.0,
-                    timecodes=["00:03"],
-                    visual_note="중간 긴장감 장면",
-                ),
-                Segment(
-                    idx=3,
-                    mode="N",
-                    audio_text=f"마무리 콜투액션: {platform_hint}",
-                    caption_text="당신의 선택은?",
-                    estimated_seconds=4.0,
-                    timecodes=["00:09"],
-                    visual_note="클라이맥스/엔딩",
-                ),
-            ]
-            description = f"{style_hint}. {platform_hint}. 메모: {memo_text or '없음'}"
-            strategy = Strategy(
-                number=number,
-                title=title,
-                description=description,
-                reorder_text="",
-                segments=segments,
-                strategy_type=strategy_type,
-                platform=platform,
-                generated_by_ai=True,
+    def generate(self, count: int, platform: str, keywords: str, memo: str) -> list[Strategy]:
+        strategies: list[Strategy] = []
+        kw = [k.strip() for k in keywords.split(",") if k.strip()] or ["핵심"]
+        for i in range(1, min(10, count) + 1):
+            base = kw[(i - 1) % len(kw)]
+            strategies.append(
+                Strategy(
+                    strategy_number=i,
+                    strategy_title=f"{i} {base} 중심 쇼츠 전략",
+                    strategy_type=STRATEGY_TYPES[(i - 1) % len(STRATEGY_TYPES)],
+                    description=f"{memo or '자동 생성'} 기반 전략",
+                    hook_candidates=[f"{base} 이 장면 놓치면 손해", f"{base}의 진짜 결말", f"{base} 핵심만 20초 요약"],
+                    title_candidates=[f"{base} 20초 정리", f"{base} 충격 포인트", f"{base} 바로 이해"],
+                    thumbnail_copy_candidates=[f"{base} 실화?", f"{base} 핵심", f"{base} 반전"],
+                    generated_by_ai=True,
+                    platform=platform,
+                )
             )
-            result.append(strategy)
-        return result
+        self.logger(f"generated strategies={len(strategies)}")
+        return strategies
 
-    def augment_existing(
-        self,
-        strategies: list[Strategy],
-        style: str,
-        platform: str,
-        user_keywords: str,
-        memo_text: str,
-    ) -> list[Strategy]:
-        style_hint = STYLE_HINTS.get(style, STYLE_HINTS["혼합형"])
-        platform_hint = PLATFORM_HINTS.get(platform, PLATFORM_HINTS["YouTube Shorts"])
-        kw = user_keywords.strip() or "핵심 장면"
-        for i, strategy in enumerate(strategies):
-            strategy.strategy_type = strategy.strategy_type or STRATEGY_TYPES[i % len(STRATEGY_TYPES)]
-            strategy.platform = platform
-            strategy.generated_by_ai = False
-            if not strategy.description:
-                strategy.description = f"{style_hint} / {platform_hint}"
-            strategy.description = f"{strategy.description}\n보강 메모: {memo_text or '없음'} / 키워드: {kw}"
+    def augment_existing(self, strategies: list[Strategy]) -> list[Strategy]:
+        for s in strategies:
+            if len(s.hook_candidates) < 3:
+                s.hook_candidates += [f"{s.strategy_title} 훅 {i}" for i in range(1, 4 - len(s.hook_candidates) + 1)]
+            if len(s.title_candidates) < 3:
+                s.title_candidates += [f"{s.strategy_title} 제목 {i}" for i in range(1, 4 - len(s.title_candidates) + 1)]
+            if len(s.thumbnail_copy_candidates) < 3:
+                s.thumbnail_copy_candidates += [f"{s.strategy_title} 썸네일 {i}" for i in range(1, 4 - len(s.thumbnail_copy_candidates) + 1)]
+        self.logger("existing strategies augmented")
         return strategies

@@ -2,114 +2,71 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import Callable
 
-from bs4 import BeautifulSoup, Tag
+from bs4 import BeautifulSoup
 
 from base_parser import BaseStrategyParser
 from models import Strategy
-from utils import SEGMENT_START_PATTERN, is_strategy_header
+from settings import STRATEGY_TYPES
+
+HEADER_RE = re.compile(r"^(10|[1-9])\s+(?!\[[NA]\])(.*\S.*)$")
+SEGMENT_RE = re.compile(r"^\d+\s+\[[NA]\]")
 
 
 class HTMLStrategyParser(BaseStrategyParser):
-    CONTAINER_TAGS = ["section", "article", "div"]
-    HEADING_TAGS = ["h1", "h2", "h3", "h4"]
+    def __init__(self, logger: Callable[[str], None]) -> None:
+        super().__init__(logger)
 
-    def parse(self, file_path: str) -> list[Strategy]:
-        soup = BeautifulSoup(Path(file_path).read_text(encoding="utf-8", errors="replace"), "lxml")
-        self.log("input file type=html")
-
-        self.log("html parse mode=container-first")
-        strategies, titles = self._parse_container_first(soup)
-        if strategies:
-            self.log(f"detected strategy titles={titles}")
-            return self.finalize(strategies)
-
-        self.log("html parse mode=table parsing")
-        strategies, titles = self._parse_table(soup)
-        if strategies:
-            self.log(f"detected strategy titles={titles}")
-            return self.finalize(strategies)
-
-        self.log("html parse mode=text fallback")
-        lines = self._normalized_lines(soup.get_text("\n", strip=True).splitlines())
-        strategies, titles = self._parse_lines(lines)
-        self.log(f"detected strategy titles={titles}")
-        return self.finalize(strategies)
-
-    def _parse_container_first(self, soup: BeautifulSoup) -> tuple[list[Strategy], list[str]]:
-        found: list[tuple[int, str, Tag]] = []
-        seen: set[int] = set()
-        for heading in soup.find_all(self.HEADING_TAGS):
-            if not isinstance(heading, Tag):
-                continue
-            text = self._line(heading.get_text(" ", strip=True))
-            if not is_strategy_header(text):
-                continue
-            number = int(text.split()[0])
-            if number in seen:
-                continue
-            title = re.sub(r"^\d{1,2}\s+", "", text).strip()
-            found.append((number, title, heading.parent if isinstance(heading.parent, Tag) else heading))
-            seen.add(number)
-
-        for tag in soup.find_all(self.CONTAINER_TAGS):
-            if not isinstance(tag, Tag):
-                continue
-            heading = tag.find(self.HEADING_TAGS)
-            if not isinstance(heading, Tag):
-                continue
-            text = self._line(heading.get_text(" ", strip=True))
-            if not is_strategy_header(text):
-                continue
-            number = int(text.split()[0])
-            if number in seen:
-                continue
-            title = re.sub(r"^\d{1,2}\s+", "", text).strip()
-            found.append((number, title, tag))
-            seen.add(number)
-
-        strategies: list[Strategy] = []
-        titles: list[str] = []
-        for number, title, tag in found:
-            block = self._normalized_lines(tag.get_text("\n", strip=True).splitlines())
-            block = [line for line in block if self._line(line) != self._line(f"{number} {title}")]
-            strategies.append(self.parse_strategy_content(number, title, block))
-            titles.append(f"{number}. {title}")
-        return strategies, titles
-
-    def _parse_table(self, soup: BeautifulSoup) -> tuple[list[Strategy], list[str]]:
+    def parse(self, file_path: Path) -> list[Strategy]:
+        html = file_path.read_text(encoding="utf-8", errors="ignore")
+        soup = BeautifulSoup(html, "lxml")
         lines: list[str] = []
-        for table in soup.find_all("table"):
-            for row in table.find_all("tr"):
-                cells = [self._line(col.get_text(" ", strip=True)) for col in row.find_all(["td", "th"])]
-                lines.extend([cell for cell in cells if cell])
-        return self._parse_lines(lines)
 
-    def _parse_lines(self, lines: list[str]) -> tuple[list[Strategy], list[str]]:
-        starts: list[tuple[int, int, str]] = []
-        titles: list[str] = []
-        seen: set[int] = set()
-        for idx, line in enumerate(lines):
-            if SEGMENT_START_PATTERN.match(line):
+        containers = soup.select("main, article, section, .content, .container")
+        if containers:
+            self.logger("html parse mode=container-first")
+            for c in containers:
+                lines.extend(self._extract_lines(c.get_text("\n")))
+        tables = soup.select("table")
+        if tables:
+            self.logger("html parse mode=table parsing")
+            for t in tables:
+                lines.extend(self._extract_lines(t.get_text("\n")))
+        if not lines:
+            self.logger("html parse mode=text fallback")
+            lines = self._extract_lines(soup.get_text("\n"))
+
+        strategies: dict[int, Strategy] = {}
+        current_no: int | None = None
+
+        for line in lines:
+            if SEGMENT_RE.match(line):
+                if current_no in strategies:
+                    strategies[current_no].segments.append({"line": line})
                 continue
-            if not is_strategy_header(line):
+            m = HEADER_RE.match(line)
+            if not m:
                 continue
-            number = int(line.split()[0])
-            if number in seen:
+            num = int(m.group(1))
+            title = m.group(2).strip()
+            if len(title) < 5 or num in strategies:
                 continue
-            title = re.sub(r"^\d{1,2}\s+", "", line).strip()
-            starts.append((idx, number, title))
-            titles.append(f"{number}. {title}")
-            seen.add(number)
+            current_no = num
+            strategies[num] = Strategy(
+                strategy_number=num,
+                strategy_title=title,
+                strategy_type=STRATEGY_TYPES[(num - 1) % len(STRATEGY_TYPES)],
+                description=f"HTML 파싱 전략 {num}",
+            )
 
-        strategies: list[Strategy] = []
-        for i, (start, number, title) in enumerate(starts):
-            end = starts[i + 1][0] if i + 1 < len(starts) else len(lines)
-            strategies.append(self.parse_strategy_content(number, title, lines[start + 1 : end]))
-        return strategies, titles
+        valid = [s for s in sorted(strategies.values(), key=lambda x: x.strategy_number) if len(s.segments) > 0]
+        self.logger(f"detected strategy titles={[s.strategy_title for s in valid]}")
+        self.logger(f"valid strategies count={len(valid)}")
+        for s in valid:
+            self.logger(f"per-strategy segment count={s.strategy_number}:{len(s.segments)}")
+        return valid
 
-    def _normalized_lines(self, lines: list[str]) -> list[str]:
-        return [self._line(line) for line in lines if self._line(line)]
-
-    def _line(self, value: str) -> str:
-        return re.sub(r"\s+", " ", value).strip()
+    @staticmethod
+    def _extract_lines(text: str) -> list[str]:
+        return [ln.strip() for ln in text.splitlines() if ln.strip()]
