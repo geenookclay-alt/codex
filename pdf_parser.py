@@ -6,7 +6,7 @@ import pdfplumber
 
 from base_parser import BaseStrategyParser
 from models import Strategy
-from utils import is_strategy_header
+from utils import SEGMENT_START_PATTERN, is_strategy_header
 
 
 class PDFStrategyParser(BaseStrategyParser):
@@ -22,16 +22,18 @@ class PDFStrategyParser(BaseStrategyParser):
         self.log("input file type=pdf")
 
         starts: list[tuple[int, int, str]] = []
-        headers: list[str] = []
+        titles: list[str] = []
         for i, line in enumerate(lines):
+            if SEGMENT_START_PATTERN.match(line):
+                continue
             if not is_strategy_header(line):
                 continue
             number = int(line.split()[0])
             title = re.sub(r"^\d{1,2}\s+", "", line).strip()
             starts.append((i, number, title))
-            headers.append(line)
+            titles.append(f"{number}. {title}")
 
-        self.log(f"detected strategy headers={headers}")
+        self.log(f"detected strategy titles={titles}")
 
         strategies: list[Strategy] = []
         for idx, (start, number, title) in enumerate(starts):

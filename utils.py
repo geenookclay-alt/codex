@@ -22,11 +22,9 @@ def is_strategy_header(line: str) -> bool:
         return False
     if re.match(r"^\d{1,2}\s+\[[NA]\]", text):
         return False
-
     number = int(text.split()[0])
     if number < 1 or number > 10:
         return False
-
     title = re.sub(r"^\d{1,2}\s+", "", text).strip()
     return len(title) >= 5
 

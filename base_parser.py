@@ -36,7 +36,7 @@ class BaseStrategyParser(ABC):
         if current:
             segment_blocks.append(current)
 
-        segments = [self.parse_segment(block) for block in segment_blocks]
+        segments = [self.parse_segment(block) for block in segment_blocks if block]
         desc = "\n".join(description_lines).strip()
         reorder_match = re.search(r"재배열|재배치|reorder", desc, re.IGNORECASE)
         reorder = desc[reorder_match.start() :].strip() if reorder_match else ""
@@ -82,6 +82,6 @@ class BaseStrategyParser(ABC):
 
         valid = [deduped[number] for number in sorted(deduped)]
         self.log(f"valid strategies count={len(valid)}")
-        for strategy in valid:
-            self.log(f"per-strategy segment count={strategy.number}:{len(strategy.segments)}")
+        for item in valid:
+            self.log(f"per-strategy segment count={item.number}:{len(item.segments)}")
         return valid

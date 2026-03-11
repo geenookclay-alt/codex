@@ -41,7 +41,9 @@ class AIPackager:
             "description_candidates": desc_candidates,
             "hashtags": hashtags,
             "subtitle_style": subtitle_style,
-            "estimated_runtime": round(sum(seg.estimated_seconds for seg in strategy.segments), 2),
+            "estimated_runtime": strategy.estimated_runtime(),
+            "strategy_type": strategy.strategy_type,
+            "overall_score": strategy.overall_score,
             "output_files": output_files,
         }
         mpath = ai_dir / f"strategy_{num}_metadata.json"
@@ -54,9 +56,9 @@ class AIPackager:
         return [
             f"[rhythm] {seed[:30]}... 지금부터 시작입니다",
             f"[rhythm] 3초 안에 판이 뒤집힙니다: {strategy.title[:25]}",
-            f"[rhythm] 이 장면 하나로 결말이 달라집니다",
+            "[rhythm] 이 장면 하나로 결말이 달라집니다",
             f"[movie] {strategy.title}의 핵심, 단 3초에 압축합니다.",
-            f"[movie] 방금 본 한 컷이 모든 복선이었습니다.",
+            "[movie] 방금 본 한 컷이 모든 복선이었습니다.",
         ]
 
     def _title_candidates(self, strategy: Strategy) -> list[str]:
@@ -66,12 +68,12 @@ class AIPackager:
             f"(감정형) 이 장면에서 소름 돋은 사람?",
             f"(카운트다운형) {base} 핵심 3포인트",
             f"(카운트다운형) 10초만에 이해하는 {base}",
-            f"(참교육형) 오만한 주인공의 최후",
-            f"(참교육형) 결국 판을 읽은 사람은 따로 있었다",
+            "(참교육형) 오만한 주인공의 최후",
+            "(참교육형) 결국 판을 읽은 사람은 따로 있었다",
             f"(정보형) 쇼츠 편집 포인트로 보는 {base}",
             f"(정보형) 초보도 따라하는 {base} 구성",
-            f"(감정형) 결말 알면 다시 보게 되는 스토리",
-            f"(카운트다운형) 이 영상에서 꼭 봐야 할 장면 TOP3",
+            "(감정형) 결말 알면 다시 보게 되는 스토리",
+            "(카운트다운형) 이 영상에서 꼭 봐야 할 장면 TOP3",
         ]
 
     def _thumbnail_copy(self, _strategy: Strategy) -> list[str]:
