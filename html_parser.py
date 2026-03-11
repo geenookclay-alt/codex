@@ -11,7 +11,8 @@ from utils import SEGMENT_START_PATTERN, is_strategy_header
 
 
 class HTMLStrategyParser(BaseStrategyParser):
-    CONTAINER_TAGS = ["section", "article", "div", "h1", "h2", "h3"]
+    CONTAINER_TAGS = ["section", "article", "div"]
+    HEADING_TAGS = ["h1", "h2", "h3", "h4"]
 
     def parse(self, file_path: str) -> list[Strategy]:
         soup = BeautifulSoup(Path(file_path).read_text(encoding="utf-8", errors="replace"), "lxml")
@@ -38,10 +39,26 @@ class HTMLStrategyParser(BaseStrategyParser):
     def _parse_container_first(self, soup: BeautifulSoup) -> tuple[list[Strategy], list[str]]:
         found: list[tuple[int, str, Tag]] = []
         seen: set[int] = set()
+        for heading in soup.find_all(self.HEADING_TAGS):
+            if not isinstance(heading, Tag):
+                continue
+            text = self._line(heading.get_text(" ", strip=True))
+            if not is_strategy_header(text):
+                continue
+            number = int(text.split()[0])
+            if number in seen:
+                continue
+            title = re.sub(r"^\d{1,2}\s+", "", text).strip()
+            found.append((number, title, heading.parent if isinstance(heading.parent, Tag) else heading))
+            seen.add(number)
+
         for tag in soup.find_all(self.CONTAINER_TAGS):
             if not isinstance(tag, Tag):
                 continue
-            text = self._line(tag.get_text(" ", strip=True))
+            heading = tag.find(self.HEADING_TAGS)
+            if not isinstance(heading, Tag):
+                continue
+            text = self._line(heading.get_text(" ", strip=True))
             if not is_strategy_header(text):
                 continue
             number = int(text.split()[0])
