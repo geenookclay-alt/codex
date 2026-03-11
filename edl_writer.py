@@ -1,28 +1,32 @@
 from __future__ import annotations
 
 from models import Strategy
+from utils import tc_to_seconds
 
 
 class EDLWriter:
     def build_edl(self, strategy: Strategy) -> str:
-        lines = ["TITLE: Shorts Auto Editor", "FCM: NON-DROP FRAME"]
-        start_tc = 0
-        for i, seg in enumerate(strategy.segments, start=1):
-            dur_frames = int(seg.estimated_seconds * 30)
-            in_f = start_tc
-            out_f = start_tc + dur_frames
-            start_tc = out_f
-            lines.append(
-                f"{i:03}  AX       V     C        {self._tc(in_f)} {self._tc(out_f)} {self._tc(in_f)} {self._tc(out_f)}"
+        rows = [f"TITLE: strategy_{strategy.number:02}", "FCM: NON-DROP FRAME"]
+        rec_cursor = 0.0
+        for idx, segment in enumerate(strategy.segments, start=1):
+            source_in = tc_to_seconds(segment.timecodes[0]) if segment.timecodes else 0.0
+            source_out = source_in + max(0.1, segment.estimated_seconds)
+            rec_in = rec_cursor
+            rec_out = rec_cursor + max(0.1, segment.estimated_seconds)
+            rec_cursor = rec_out
+            rows.append(
+                f"{idx:03}  AX       V     C        "
+                f"{self._tc(source_in)} {self._tc(source_out)} {self._tc(rec_in)} {self._tc(rec_out)}"
             )
-            lines.append(f"* FROM CLIP NAME: SEG_{seg.idx:02}")
-        return "\n".join(lines) + "\n"
+            rows.append(f"* FROM CLIP NAME: SEG_{segment.idx:02}")
+        return "\n".join(rows) + "\n"
 
-    def _tc(self, frames: int, fps: int = 30) -> str:
-        h = frames // (fps * 3600)
-        frames %= fps * 3600
-        m = frames // (fps * 60)
-        frames %= fps * 60
-        s = frames // fps
-        f = frames % fps
-        return f"{h:02}:{m:02}:{s:02}:{f:02}"
+    def _tc(self, seconds: float, fps: int = 30) -> str:
+        total_frames = int(round(seconds * fps))
+        hh = total_frames // (fps * 3600)
+        total_frames %= fps * 3600
+        mm = total_frames // (fps * 60)
+        total_frames %= fps * 60
+        ss = total_frames // fps
+        ff = total_frames % fps
+        return f"{hh:02}:{mm:02}:{ss:02}:{ff:02}"
