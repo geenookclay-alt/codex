@@ -134,13 +134,16 @@ class App(tk.Tk):
     def refresh_strategies(self) -> None:
         strategy_path = self.strategy_file.get().strip()
         if strategy_path and Path(strategy_path).exists():
+            self.log("전략 모드=보강 모드 (전략 파일 있음)")
             parser = create_parser(strategy_path, self.log)
             base = parser.parse(strategy_path)
         else:
+            self.log("전략 모드=생성 모드 (전략 파일 없음)")
             base = []
 
         if base:
             if self.auto_generate.get():
+                self.log("AI 보강=활성")
                 StrategyGenerator(self.log).augment_existing(
                     base,
                     self.style.get(),
@@ -148,7 +151,10 @@ class App(tk.Tk):
                     self.user_keywords.get(),
                     self.memo_text.get(),
                 )
+            else:
+                self.log("AI 보강=비활성 (파싱 전략만 사용)")
         elif self.auto_generate.get():
+            self.log("AI 생성=활성")
             base = StrategyGenerator(self.log).generate(
                 count=self.strategy_count.get(),
                 style=self.style.get(),
@@ -158,6 +164,8 @@ class App(tk.Tk):
                 memo_text=self.memo_text.get(),
                 start_number=1,
             )
+        else:
+            self.log("AI 생성=비활성")
 
         ranked = StrategyRanker().rank(base)
         self._strategies = ranked
