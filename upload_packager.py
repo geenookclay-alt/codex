@@ -11,7 +11,7 @@ class UploadPackager:
         files = {
             "final_title.txt": strategy.title,
             "final_description.txt": f"{strategy.title}\n\n핵심 장면 요약 쇼츠 버전입니다.",
-            "final_hashtags.txt": "#쇼츠 #shorts #영상편집 #카지노 #전략",
+            "final_hashtags.txt": "#쇼츠 #shorts #영상편집 #전략",
             "final_thumbnail_copy.txt": "반전주의",
             "upload_checklist.txt": "\n".join(
                 [

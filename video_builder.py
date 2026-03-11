@@ -14,13 +14,11 @@ class VideoBuilder:
 
     def build_preview(self, input_video: Path, strategy: Strategy, output_video: Path) -> None:
         output_video.parent.mkdir(parents=True, exist_ok=True)
-        with tempfile.TemporaryDirectory(prefix="shorts_v4_") as temp_dir:
+        with tempfile.TemporaryDirectory(prefix="shorts_v5_") as temp_dir:
             temp = Path(temp_dir)
             parts: list[Path] = []
             for i, segment in enumerate(strategy.segments, start=1):
-                if not segment.timecodes:
-                    continue
-                start_sec = tc_to_seconds(segment.timecodes[0])
+                start_sec = tc_to_seconds(segment.timecodes[0]) if segment.timecodes else (i - 1) * 1.5
                 duration = max(0.2, segment.estimated_seconds)
                 part = temp / f"part_{i:03}.mp4"
                 cmd = [

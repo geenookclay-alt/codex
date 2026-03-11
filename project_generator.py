@@ -37,7 +37,23 @@ class ProjectGenerator:
         ensure_dir(output_dir)
         selected = [s for s in strategies if not options.selected_numbers or s.number in options.selected_numbers]
 
-        manifest: dict[str, list[str] | dict[str, list[str]]] = {"generated_output_paths": [], "strategies": {}}
+        rankings = [
+            {
+                "strategy_number": s.number,
+                "strategy_title": s.title,
+                "overall_score": s.overall_score,
+                "recommended": s.recommended,
+            }
+            for s in sorted(selected, key=lambda item: item.overall_score, reverse=True)
+        ]
+        rankings_path = output_dir / "strategy_rankings.json"
+        rankings_path.write_text(json.dumps(rankings, ensure_ascii=False, indent=2), encoding="utf-8")
+        self.log(f"strategy rankings path={rankings_path}")
+
+        generated_root = output_dir / "strategies_generated.json"
+        generated_root.write_text(json.dumps([s.to_dict() for s in selected], ensure_ascii=False, indent=2), encoding="utf-8")
+
+        manifest: dict[str, object] = {"generated_output_paths": [], "strategies": {}, "rankings_path": str(rankings_path)}
         for strategy in selected:
             folder = ensure_dir(output_dir / f"strategy_{strategy.number:02}_{safe_filename(strategy.title)}")
             preview_dir = ensure_dir(folder / "preview")
@@ -47,12 +63,29 @@ class ProjectGenerator:
             srt_path = folder / f"strategy_{strategy.number:02}.srt"
             csv_path = folder / f"strategy_{strategy.number:02}.csv"
             json_path = folder / f"strategy_{strategy.number:02}.json"
+            eval_path = folder / f"strategy_{strategy.number:02}_evaluation.json"
 
             edl_path.write_text(self.edl_writer.build_edl(strategy), encoding="utf-8")
             srt_path.write_text(self.sub_builder.build_srt(strategy, options.subtitle_style), encoding="utf-8")
             self._write_csv(csv_path, strategy)
             json_path.write_text(json.dumps(strategy.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
-            generated.extend([edl_path, srt_path, csv_path, json_path])
+            eval_path.write_text(
+                json.dumps(
+                    {
+                        "strategy_number": strategy.number,
+                        "hook_score": strategy.hook_score,
+                        "emotion_score": strategy.emotion_score,
+                        "clarity_score": strategy.clarity_score,
+                        "shorts_fit_score": strategy.shorts_fit_score,
+                        "overall_score": strategy.overall_score,
+                        "recommended": strategy.recommended,
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+            generated.extend([edl_path, srt_path, csv_path, json_path, eval_path])
 
             preview_path = preview_dir / f"strategy_{strategy.number:02}_{safe_filename(strategy.title)}.mp4"
             if options.make_preview:
@@ -81,7 +114,7 @@ class ProjectGenerator:
                 generated.extend(self.upload_packager.create(strategy, folder / "upload"))
 
             self.log(f"generated output paths={[str(path) for path in generated]}")
-            manifest["generated_output_paths"].extend([str(path) for path in generated])
+            manifest["generated_output_paths"] += [str(path) for path in generated]
             manifest["strategies"][str(strategy.number)] = [str(path) for path in generated]
 
         manifest_path = output_dir / "manifest.json"
