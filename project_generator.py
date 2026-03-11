@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import csv
 import json
-import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -10,7 +9,7 @@ from ai_packager import AIPackager
 from edl_writer import EDLWriter
 from models import Strategy
 from subtitle_builder import SubtitleBuilder
-from utils import LogFn, SEGMENT_START_PATTERN, ensure_dir, safe_filename
+from utils import LogFn, ensure_dir, safe_filename
 from video_builder import VideoBuilder
 
 
@@ -35,17 +34,13 @@ class ProjectGenerator:
         ensure_dir(output_dir)
         manifest: dict[str, list[str]] = {"generated": []}
 
-        if len(strategies) > 10:
-            self.log("경고: 전략 개수가 비정상적으로 많습니다. HTML 헤더 탐지를 재검토하세요.")
-
         selected = [s for s in strategies if not options.selected_numbers or s.number in options.selected_numbers]
-        valid_strategies = [s for s in selected if s.segments]
-        self.log(f"final valid strategies={len(valid_strategies)}")
-
-        if not valid_strategies:
-            self._log_empty_valid_debug(selected)
+        valid_strategies = [s for s in selected if len(s.segments) > 0]
+        self.log(f"valid strategies count={len(valid_strategies)}")
 
         for strategy in valid_strategies:
+            self.log(f"strategy segment count={strategy.number}:{len(strategy.segments)}")
+
             folder_name = f"strategy_{strategy.number:02}_{safe_filename(strategy.title)}"
             sdir = ensure_dir(output_dir / folder_name)
             preview_dir = ensure_dir(sdir / "preview")
@@ -70,7 +65,9 @@ class ProjectGenerator:
 
             if options.make_burnin:
                 burn_path = preview_dir / f"strategy_{strategy.number:02}_{safe_filename(strategy.title)}_subtitled.mp4"
-                if not srt_content.strip():
+                if not srt_path.exists():
+                    self.log(f"burn-in skipped reason=SRT 파일 없음: {srt_path}")
+                elif srt_path.stat().st_size == 0:
                     self.log(f"burn-in skipped reason=SRT 파일 비어 있음: {srt_path}")
                 else:
                     ok, reason = self.video_builder.maybe_burn_in_subtitle(input_video, srt_path, burn_path)
@@ -83,34 +80,14 @@ class ProjectGenerator:
                 ai_dir = ensure_dir(sdir / "ai")
                 generated.extend(self.ai_packager.create(strategy, ai_dir))
 
-            for p in generated:
-                self.log(f"generated file paths={p}")
-                manifest["generated"].append(str(p))
+            for path in generated:
+                self.log(f"generated output paths={path}")
+                manifest["generated"].append(str(path))
 
         manifest_path = output_dir / "manifest.json"
         manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
-        self.log(f"generated file paths={manifest_path}")
+        self.log(f"generated output paths={manifest_path}")
         return manifest_path
-
-    def _log_empty_valid_debug(self, strategies: list[Strategy]) -> None:
-        titles = [f"{s.number}. {s.title}" for s in strategies]
-        self.log(f"detected strategy titles={titles}")
-
-        preview_lines: list[str] = []
-        for strategy in strategies:
-            preview_lines.append(f"{strategy.number} {strategy.title}")
-            for line in strategy.description.splitlines():
-                stripped = line.strip()
-                if stripped:
-                    preview_lines.append(stripped)
-        preview_100 = preview_lines[:100]
-        self.log(f"first 100 lines preview={preview_100}")
-
-        segment_candidates: list[str] = []
-        for line in preview_lines:
-            if SEGMENT_START_PATTERN.match(line) or re.match(r"^\d+\s+\[[NA]\]", line):
-                segment_candidates.append(line)
-        self.log(f"segment start candidates={segment_candidates[:100]}")
 
     def _write_csv(self, csv_path: Path, strategy: Strategy) -> None:
         with csv_path.open("w", newline="", encoding="utf-8-sig") as f:
