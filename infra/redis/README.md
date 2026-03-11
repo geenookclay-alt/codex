@@ -1,0 +1,1 @@
+Redis queue backend for worker task dispatch.
